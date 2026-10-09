@@ -1,0 +1,553 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="aldergate_housing.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="1752"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="contractors" custom_title="0" dock_id="1" table="4,11:maincontractors"/><dock_state state="000000ff00000000fd00000001000000020000033b00000226fc0100000001fb000000160064006f0063006b00420072006f007700730065003101000000000000033b0000011800ffffff0000033b0000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="contractors" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="83"/><column index="2" value="195"/><column index="3" value="85"/><column index="4" value="75"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="repairs" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="59"/><column index="2" value="73"/><column index="3" value="74"/><column index="4" value="83"/><column index="5" value="78"/><column index="6" value="85"/><column index="7" value="85"/><column index="8" value="98"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1">SELECT COUNT(*) AS jobs_counted,
+ROUND(100.0*SUM(CASE WHEN r.completed_date &lt;=r.target_date THEN 1 ELSE 0 END)/COUNT(*),1) AS pct_on_time
+FROM repairs r
+INNER JOIN contractors c ON r.contractor_id=c.contractor_id
+WHERE r.completed_date IS NOT NULL;
+
+SELECT CASE
+WHEN completed_date IS NULL THEN 'still_open'
+WHEN completed_date&lt;=target_date THEN 'on_time'
+ELSE 'LATE'
+END AS outcome,
+COUNT(*) AS jobs
+FROM repairs
+GROUP BY outcome
+ORDER BY jobs DESC;
+
+SELECT MIN(raised_date) AS oldest_open,
+COUNT(*) AS open_jobs
+FROM repairs
+WHERE completed_date is NULL;
+
+WITH job_status AS (SELECT r.repair_id, r.priority,p.patch,
+CASE
+WHEN r.completed_date IS NULL THEN 'still_open'
+WHEN r.completed_date&lt;=r.target_date THEN 'on_time'
+ELSE 'late'
+END AS outcome
+FROM repairs r
+LEFT JOIN properties p ON r.property_id=p.property_id)
+SELECT patch, outcome, COUNT(*) AS jobs
+FROM job_status
+GROUP BY patch, outcome
+ORDER BY patch, outcome;
+
+WITH job_status AS (SELECT CASE
+WHEN completed_date IS NULL THEN 'still_open'
+WHEN completed_date&lt;=target_date THEN 'on_time'
+ELSE 'LATE'
+END AS outcome
+FROM repairs)
+Select ROUND(100.0*SUM(CASE WHEN outcome ='on_time' THEN 1 ELSE 0 END)/COUNT(*),1) AS pct_on_time_honest
+FROM job_status;
+
+SELECT COUNT(*) AS jobs_counted,
+ROUND(100.0*SUM(CASE WHEN r.completed_date &lt;=r.target_date THEN 1 ELSE 0 END)/COUNT(*),1) AS pct_on_time
+FROM repairs r
+LEFT JOIN contractors c ON r.contractor_id=c.contractor_id;
+
+WITH deduped AS(
+SELECT DISTINCT repair_id,completed_date, target_date
+FROM repairs)
+SELECT COUNT(*) AS jobs_counted,
+ROUND(100.0*SUM(CASE WHEN completed_date &lt;=target_date THEN 1 ELSE 0 END)/COUNT(*),1) AS pct_on_time
+FROM deduped;
+
+SELECT COUNT(*) AS impossible,
+SUM (CASE WHEN completed_date&lt;=target_date 
+THEN 1 ELSE 0 END) AS counted_on_time
+FROM repairs
+WHERE completed_date&lt;raised_date;
+
+WITH job_status AS (
+SELECT priority,
+CASE WHEN completed_date IS NULL THEN 'still_open'
+WHEN completed_date &lt;=target_date THEN 'on_time'
+ELSE 'late'
+END AS outcome
+FROM repairs)
+SELECT priority, COUNT(*) AS jobs
+FROM job_status
+GROUP BY priority;
+
+WITH job_status AS (
+SELECT priority,
+CASE WHEN completed_date IS NULL THEN 'still_open'
+WHEN completed_date &lt;=target_date THEN 'on_time'
+ELSE 'late'
+END AS outcome
+FROM repairs)
+SELECT priority, COUNT(*) AS jobs,
+ROUND(100.0*SUM(CASE WHEN outcome = 'on_time' THEN 1 ELSE 0 END)/
+COUNT(*),1) AS pct_on_time
+FROM job_status
+GROUP BY priority
+ORDER BY pct_on_time;
+
+WITH job_status AS (
+SELECT priority,
+CASE WHEN completed_date IS NULL THEN 'still_open'
+WHEN completed_date &lt;=target_date THEN 'on_time'
+ELSE 'late'
+END AS outcome
+FROM repairs)
+SELECT priority, COUNT(*) AS jobs,
+SUM(CASE WHEN outcome = 'on_time' THEN 1 ELSE 0 END) AS on_time,
+SUM(CASE WHEN outcome = 'still_open' THEN 1 ELSE 0 END)AS still_open,
+ROUND(100.0 * SUM(CASE WHEN outcome = 'on_time' THEN 1 ELSE 0 END)/
+COUNT(*),1) AS pct_on_time
+FROM job_status
+GROUP BY priority
+ORDER BY pct_on_time;
+
+WITH job_status AS (
+SELECT p.patch,
+CASE WHEN r.completed_date IS NULL THEN 'still_open'
+WHEN r.completed_date &lt;=r.target_date THEN 'on_time'
+ELSE 'late'
+END AS outcome
+FROM repairs r
+LEFT JOIN properties p ON r.property_id=p.property_id)
+SELECT patch,
+COUNT(*) AS jobs,
+ROUND(100.0 * SUM(CASE WHEN outcome = 'on_time' THEN 1 ELSE 0 END)/
+COUNT(*),1) AS pct_on_time
+FROM job_status
+GROUP BY patch</sql><sql name="Subqueries &amp; CTEs">SLIDE 2.
+SELECT repair_id, property_id,raised_date
+FROM repairs
+WHERE completed_date = (SELECT MIN(raised_date)
+FROM repairs
+WHERE completed_date IS NULL)
+
+SLIDE 3.
+1
+SELECT r.property_id, p.patch, COUNT(*) AS jobs
+FROM repairs r 
+LEFT JOIN properties p ON r.property_id=p.property_id
+GROUP BY r.property_id, p.patch
+ORDER BY jobs DESC r.property_id
+LIMIT 3;
+
+SELECT r.property_id, p.patch, COUNT(*) AS jobs
+FROM repairs r
+LEFT JOIN properties p ON r.property_id=p.property_id
+GROUP BY r.property_id, p.patch
+ORDER BY jobs DESC, r.property_id
+LIMIT 3;
+2
+SELECT property_id
+FROM properties
+WHERE patch = 'Northfields'
+ORDER BY property_id;
+3
+SELECT MIN(raised_date)
+FROM repairs
+WHERE completed_date IS NULL;
+
+Slide 6.
+SELECT property_id, COUNT(*) AS jobs
+FROM repairs
+GROUP BY property_id
+ORDER BY jobs DESC;
+
+SELECT AVG(jobs)
+FROM (SELECT property_id, COUNT(*) AS jobs
+FROM repairs
+GROUP BY property_id);
+
+Slide 9.
+SELECT property_id, jobs
+FROM (SELECT property_id, COUNT(*) AS jobs
+      FROM repairs
+      GROUP BY property_id)
+WHERE jobs &gt; (SELECT AVG(jobs)
+              FROM (SELECT property_id, COUNT(*) AS jobs
+                    FROM repairs
+                    GROUP BY property_id))
+ORDER BY jobs DESC;
+
+Slide 10.
+WITH per_property AS (
+SELECT property_id, COUNT(*) AS jobs
+FROM repairs
+GROUP BY property_id)
+SELECT property_id,jobs
+FROM per_property
+WHERE jobs&gt;(SELECT AVG(jobs)FROM per_property)
+ORDER BY jobs DESC;
+
+Slide 11.
+WITH open_jobs AS(
+SELECT repair_id,property_id FROM repairs WHERE completed_date IS NULL),
+open_by_patch AS(
+SELECT p.patch, COUNT(*) AS open_jobs FROM open_jobs o 
+JOIN properties p ON o.property_id=p.property_id GROUP BY p.patch)
+SELECT patch, open_jobs FROM open_by_patch 
+ORDER BY open_jobs DESC;</sql><sql name="HWK 15/09">q3.
+SELECT repair_id,
+       property_id,
+       priority,
+       raised_date
+FROM repairs
+WHERE completed_date IS NULL
+  AND raised_date = (
+      SELECT MIN(raised_date)
+      FROM repairs
+      WHERE completed_date IS NULL
+  );
+q4.
+SELECT COUNT(*)
+FROM repairs
+WHERE property_id IN (
+    SELECT property_id
+    FROM properties
+    WHERE patch = 'Northfields');
+	
+or
+SELECT COUNT(*) FROM repairs r
+WHERE EXISTS (SELECT 1 FROM properties p
+WHERE p.property_id=r.property_id AND p.patch='Northfields');
+
+q5.
+SELECT property_id,
+       COUNT(*) AS jobs
+FROM repairs
+GROUP BY property_id;
+
+
+SELECT AVG(jobs)
+FROM (
+    SELECT property_id,
+           COUNT(*) AS jobs
+    FROM repairs
+    GROUP BY property_id
+);</sql><sql name="HWK - SUBUERIES AND CTEs">HOMEWORK - SUBUERIES AND CTEs SESSION
+1.
+SELECT COUNT(*) AS repairs
+FROM repairs
+WHERE raised_date = (
+SELECT MAX(raised_date)
+FROM repairs);
+
+2.
+SELECT COUNT(*) AS repairs
+FROM repairs
+WHERE contractor_id IN(
+SELECT contractor_id
+FROM contractors
+WHERE is_in_house=1);
+
+3.
+SELECT property_id, address, patch
+FROM properties
+WHERE property_id NOT IN(
+SELECT property_id
+FROM repairs);
+
+4. 
+WITH northfields AS 
+(SELECT property_id
+FROM properties
+WHERE patch = 'Northfields')
+SELECT COUNT(*) AS repairs
+FROM repairs
+WHERE property_id IN(
+SELECT property_id
+FROM northfields);
+
+5.
+WITH per_patch AS (
+SELECT p.patch, COUNT(*) AS jobs
+FROM repairs r
+JOIN properties p
+ON r.property_id=p.property_id
+GROUP BY p.patch)
+SELECT patch,jobs
+FROM per_patch
+WHERE jobs&gt;(SELECT AVG(jobs)FROM per_patch)
+ORDER BY jobs DESC;
+
+HOMEWORK.
+SUBQUERY.
+SELECT category_id, jobs
+FROM(
+SELECT category_id, COUNT(*) AS jobs
+FROM repairs
+WHERE category_id IS NOT NULL
+GROUP BY category_id)
+WHERE jobs &gt; (SELECT AVG (jobs) 
+FROM(SELECT category_id, COUNT(*) AS jobs
+FROM repairs
+WHERE category_id IS NOT NULL
+GROUP BY category_id))
+ORDER BY jobs DESC;
+
+CTE.
+WITH per_category AS(
+SELECT category_id, COUNT(*) AS jobs
+FROM repairs
+WHERE category_id IS NOT NULL
+GROUP BY category_id)
+SELECT rc.category_name,pc.jobs
+FROM per_category pc
+JOIN repair_categories rc 
+ON rc.category_id=pc.category_id
+WHERE pc.jobs&gt;(SELECT AVG(jobs)
+FROM per_category)
+ORDER BY pc.jobs DESC;</sql><sql name="Session 5">slide 5.
+SELECT property_id, COUNT(*) AS jobs
+FROM repairs
+GROUP BY property_id
+ORDER BY jobs DESC
+LIMIT 5;
+
+SELECT repair_id, raised_date, priority,
+       COUNT(*) OVER (
+         PARTITION BY property_id) AS jobs_at_this_property
+FROM repairs
+WHERE property_id=1502
+ORDER BY raised_date;
+
+slide 7.
+SELECT repair_id, raised_date, ROW_NUMBER() OVER (
+  PARTITION BY property_id, category_id
+  ORDER BY raised_date) AS visit_number
+FROM repairs
+WHERE property_id = 1502
+AND category_id = 5
+ORDER BY raised_date;
+
+slide 8.
+SELECT raised_date, LAG(raised_date) OVER (
+  PARTITION BY property_id, category_id
+  ORDER BY raised_date) AS previous_visit,
+  julianday(raised_date) - julianday(LAG(raised_date) OVER (PARTITION BY 
+  property_id, category_id 
+  ORDER BY raised_date)) AS days_since
+FROM repairs
+WHERE property_id = 1502 AND category_id = 5 ORDER BY raised_date;
+
+slide 9.
+with duplicates
+WITH ordered AS (
+SELECT property_id, category_id, raised_date, 
+LAG(raised_date) OVER (
+  PARTITION BY property_id, category_id
+  ORDER BY raised_date) AS previous_visit
+  FROM repairs)
+SELECT COUNT(*) AS repeat_visit
+FROM ordered
+WHERE previous_visit IS NOT NULL AND 
+julianday(raised_date)- julianday(previous_visit) &lt;=90;
+
+without duplicates
+WITH visits AS(
+SELECT DISTINCT repair_id, property_id, category_id, raised_date FROM repairs),
+ordered AS (
+SELECT property_id, category_id, raised_date, 
+LAG(raised_date) OVER (
+  PARTITION BY property_id, category_id
+  ORDER BY raised_date) AS previous_visit
+  FROM visits)
+SELECT COUNT(*) AS repeat_visit
+FROM ordered
+WHERE previous_visit IS NOT NULL AND 
+julianday(raised_date)- julianday(previous_visit) &lt;=90;
+
+WITH visits AS(
+SELECT DISTINCT repair_id, property_id, category_id, raised_date FROM repairs),
+ordered AS (
+SELECT property_id, category_id, raised_date, 
+LAG(raised_date) OVER (
+  PARTITION BY property_id, category_id
+  ORDER BY raised_date) AS previous_visit
+  FROM visits)
+SELECT p.property_id, p.address, p.patch, COUNT(*) AS repeat_visits
+FROM ordered o
+LEFT JOIN properties p on o.property_id = p.property_id
+WHERE o.previous_visit IS NOT NULL AND 
+julianday(raised_date)- julianday(previous_visit) &lt;=90
+GROUP BY p.property_id
+ORDER BY repeat_visits DESC;
+
+what happened previous visit.
+WITH visits AS(
+SELECT DISTINCT repair_id, property_id, category_id, raised_date, completed_date, target_date FROM repairs),
+ordered AS (
+SELECT property_id, category_id, raised_date, 
+LAG(raised_date) OVER w AS previous_visit,
+LAG(completed_date) OVER w AS previous_completed,
+LAG(target_date) OVER w AS previous_target
+FROM visits
+WINDOW w AS(PARTITION BY property_id, category_id ORDER BY raised_date))
+SELECT COUNT(*) AS repeat_visit,
+SUM(CASE WHEN previous_completed IS NOT NULL AND previous_completed &lt;= previous_target
+THEN 1 ELSE 0 END) AS after_a_job_we_called_on_time,
+SUM (CASE WHEN previous_completed IS NULL THEN 1 ELSE 0 END) AS previous_job_never_finished
+FROM ordered
+WHERE previous_visit IS NOT NULL AND 
+julianday(raised_date)- julianday(previous_visit) &lt;=90;</sql><sql name="HWK Session 5">1.
+WITH visits AS(Select DISTINCT repair_id, property_id, category_id, raised_date
+FROM repairs),
+ordered AS(SELECT property_id, category_id, raised_date,
+LAG(raised_date) OVER (PARTITION BY property_id, category_id
+ORDER by raised_date) AS previous_visit
+FROM visits)
+SELECT coalesce(rc.category_name, 'NOT CATEGORISED') AS category,
+COUNT(*) AS repeat_visits
+FROM ordered o
+LEFT JOIN repair_categories rc on o.category_id=rc.category_id
+WHERE o.previous_visit IS NOT NULL
+AND julianday(o.raised_date)-julianday(o.previous_visit)&lt;=90
+Group by category 
+ORDER BY repeat_visits DESC;
+2.
+WITH visits AS(Select DISTINCT repair_id, property_id, category_id, raised_date
+FROM repairs),
+ordered AS(SELECT property_id, category_id, raised_date,
+LAG(raised_date) OVER (PARTITION BY property_id, category_id
+ORDER by raised_date) AS previous_visit
+FROM visits)
+SELECT p.patch, COUNT(*) AS repeat_visits
+FROM ordered o
+LEFT JOIN properties p on o.property_id=p.property_id
+WHERE o.previous_visit IS NOT NULL
+AND julianday(o.raised_date)-julianday(o.previous_visit)&lt;=90
+GROUP BY p.patch
+ORDER BY repeat_visits DESC;
+3.
+SELECT c.trade,c.contractor_name, COUNT(*) AS jobs,
+row_number() OVER (PARTITION BY c.trade ORDER BY COUNT(*) DESC) AS rank_in_trade
+FROM repairs r
+JOIN contractors c on r.contractor_id=c.contractor_id
+GROUP BY c.trade,c.contractor_name
+ORDER BY c.trade, rank_in_trade;
+4.
+WITH visits AS(Select DISTINCT repair_id, property_id, category_id, raised_date
+FROM repairs),
+ordered AS(SELECT property_id, category_id, raised_date,
+LAG(raised_date) OVER (PARTITION BY property_id, category_id
+ORDER by raised_date) AS previous_visit
+FROM visits)
+SELECT COALESCE(rc.category_name, 'NOT CATEGORISED') AS category,
+COUNT(*) AS repeat_visits,
+ROUND(AVG(julianday(o.raised_date)-julianday(o.previous_visit)),1)AS avg_gap_days
+FROM ordered o
+LEFT JOIN repair_categories rc ON o.category_id=rc.category_id
+WHERE o.previous_visit IS NOT NULL
+AND julianday(o.raised_date)-julianday(o.previous_visit)&lt;=90
+GROUP BY category
+ORDER BY avg_gap_days;
+5.
+WITH visits AS(Select DISTINCT repair_id, property_id, category_id, raised_date
+FROM repairs),
+ordered AS(SELECT property_id, category_id, raised_date,
+LAG(raised_date) OVER (PARTITION BY property_id, category_id
+ORDER by raised_date) AS previous_visit
+FROM visits),
+totals AS(SELECT category_id, COUNT(*) AS jobs FROM visits GROUP BY category_id)
+SELECT coalesce(rc.category_name, 'NOT CATEGORISED') AS category, 
+t.jobs, COUNT(*) AS repeat_visits, ROUND(100.0*COUNT(*)/t.jobs,1) AS pct_repeat
+FROM ordered o
+JOIN totals t ON t.category_id=o.category_id
+LEFT JOIN repair_categories rc on rc.category_id=o.category_id
+WHERE o.previous_visit IS NOT NULL
+AND julianday(o.raised_date)-julianday(o.previous_visit)&lt;=90
+GROUP BY category 
+ORDER BY pct_repeat DESC;</sql><sql name="Session 6*">--=========================================================================================
+-- Aldergate Housing Trust: Repairs Analysis
+-- Database: aldergate_housing.db
+-- Author: Hassan Hassan
+-- Date: 06/10/2026
+
+-- Q1. How much work is there and how much is unfinished?
+-- Q2. What is the real on-time rate?
+-- Q3. What is behind the failures?
+-- Q4 Which homes do we keep going back to?
+--=========================================================================================
+
+-- Q1. How much work is there and how much is unfinished?
+SELECT	COUNT(*)							AS repairs_total,
+		COUNT(completed_date)				AS completed,
+		COUNT(*) - COUNT(completed_date)	AS still_open
+FROM repairs;
+--FINDING: 8801 repairs, 6857 completed, 1944 still open.
+--60 of the 8801 are duplicate rows from the migration.
+
+-- Q2. What is the real on-time rate?
+-- Decision: open jobs count as failures. A tenant waiting 18 months has not been served.
+-- The reported 94% excluded them. SEE README.
+WITH job_status AS (
+  SELECT CASE
+		   WHEN completed_date IS NULL        THEN 'Still open'
+		   WHEN completed_date &lt;= target_date THEN 'On time'
+		   ELSE 'Late'
+		 END AS outcome
+  FROM repairs
+)
+SELECT COUNT(*) AS jobs_counted,
+	 ROUND(100.0 * SUM(CASE WHEN outcome = 'On time' THEN 1 ELSE 0 END)
+		   / COUNT(*), 1) AS pct_on_time_honest
+FROM job_status;
+-- FINDING: 71.8% across all 8,801 jobs, against 94% reported.
+
+-- Q3. What is behind the failures?
+-- 3a. Jobs whose contractor no longer exists.
+SELECT COUNT(*) AS orphan_jobs
+FROM repairs r
+LEFT JOIN contractors c ON r.contractor_id = c.contractor_id
+WHERE c.contractor_id IS NULL;
+-- FINDING: 340 jobs, 64% of them still open. Dropped entirely
+-- by the inner join behind the old 94% figure.
+-- 3b. On-time rate by priority.
+WITH job_status AS (
+  SELECT priority,
+		 CASE
+		   WHEN completed_date IS NULL        THEN 'Still open'
+		   WHEN completed_date &lt;= target_date THEN 'On time'
+		   ELSE 'Late'
+		 END AS outcome
+  FROM repairs
+)
+SELECT priority,
+	 COUNT(*) AS jobs,
+	 ROUND(100.0 * SUM(CASE WHEN outcome = 'On time' THEN 1 ELSE 0 END)
+		   / COUNT(*), 1) AS pct_on_time
+FROM job_status
+GROUP BY priority
+ORDER BY pct_on_time;
+-- FINDING: Emergency worst at 69.7%, Routine 70.6%, Urgent 75.1%.
+-- Emergency fails by running late; Routine fails by never starting.
+
+-- Q4. Which homes do we keep going back to?
+-- Definition: same property, same category, inside 90 days.
+-- DISTINCT first, or the 60 duplicate rows count as return trips.
+WITH visits AS (
+  SELECT DISTINCT repair_id, property_id, category_id, raised_date
+  FROM repairs
+),
+ordered AS (
+  SELECT property_id,
+		 category_id,
+		 raised_date,
+		 LAG(raised_date) OVER (PARTITION BY property_id, category_id
+								ORDER BY raised_date) AS previous_visit
+  FROM visits
+)
+SELECT p.property_id,
+	 p.address,
+	 p.patch,
+	 COUNT(*) AS repeat_visits
+FROM ordered o
+LEFT JOIN properties p ON o.property_id = p.property_id
+WHERE o.previous_visit IS NOT NULL
+AND julianday(o.raised_date) - julianday(o.previous_visit) &lt;= 90
+GROUP BY p.property_id
+ORDER BY repeat_visits DESC
+LIMIT 10;
+-- FINDING: 1,341 return trips across 701 homes. 168 homes visited
+-- 3+ times. Worst: 67 Mowbray Street, Beckwith, 10 return trips.
+-- 950 of the 1,341 followed a job closed &quot;on time&quot;.
+
+</sql><current_tab id="6"/></tab_sql></sqlb_project>
